@@ -15,6 +15,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 # ---------------------------------------------------------------------------------------
 
+from ament_index_python.packages import get_package_share_directory
 import launch
 import launch_ros
 from launch import LaunchDescription
@@ -24,7 +25,10 @@ import os
 def generate_launch_description():
     pkg_share = launch_ros.substitutions.FindPackageShare(package='ros2_trt_pose_hand').find('ros2_trt_pose_hand')
     print(pkg_share)
-    default_rviz_config_path = 'src/ros2_gesture_classification/ros2_trt_pose_hand/ros2_trt_pose_hand/launch/hand_pose.rviz'
+    base_dir = os.path.join(get_package_share_directory(
+        "ros2_trt_pose_hand"), "ros2_trt_pose_hand", "input_dir")
+    default_rviz_config_path = os.path.join(get_package_share_directory(
+        "ros2_trt_pose_hand"), "launch", "hand_pose.rviz")
 
     trt_pose_hand_node = Node(
             package="ros2_trt_pose_hand",
@@ -32,7 +36,7 @@ def generate_launch_description():
             node_name="hand_pose_estimation",
             output="screen",
             parameters = [{
-                'base_dir':'/home/ak-nv/ros2_ws/src/ros2_gesture_classification/ros2_trt_pose_hand/ros2_trt_pose_hand/input_dir',
+                'base_dir': base_dir,
                 'point_range' : 10,
                 'show_image' : False,
                 'show_gesture' : True
