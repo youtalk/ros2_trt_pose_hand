@@ -21,9 +21,12 @@ import launch_ros
 from launch import LaunchDescription
 from launch_ros.actions import Node
 from launch.substitutions import LaunchConfiguration
-import os 
+import os
+
+
 def generate_launch_description():
-    pkg_share = launch_ros.substitutions.FindPackageShare(package='ros2_trt_pose_hand').find('ros2_trt_pose_hand')
+    pkg_share = launch_ros.substitutions.FindPackageShare(
+        package='ros2_trt_pose_hand').find('ros2_trt_pose_hand')
     print(pkg_share)
     base_dir = os.path.join(get_package_share_directory(
         "ros2_trt_pose_hand"), "ros2_trt_pose_hand", "input_dir")
@@ -31,38 +34,34 @@ def generate_launch_description():
         "ros2_trt_pose_hand"), "launch", "hand_pose.rviz")
 
     trt_pose_hand_node = Node(
-            package="ros2_trt_pose_hand",
-            node_executable="hand-pose-estimation",
-            node_name="hand_pose_estimation",
-            output="screen",
-            parameters = [{
+        package="ros2_trt_pose_hand",
+        node_executable="hand-pose-estimation",
+        node_name="hand_pose_estimation",
+        output="screen",
+        parameters=[{
                 'base_dir': base_dir,
-                'point_range' : 10,
-                'show_image' : False,
-                'show_gesture' : True
-                }],
-            )
+                'point_range': 10,
+                'show_image': False,
+                'show_gesture': True
+        }],
+    )
     cam2image_node = Node(
-            package="image_tools",
-            node_executable="cam2image",
-            node_name="cam",
-            )
+        package="image_tools",
+        node_executable="cam2image",
+        node_name="cam",
+    )
 
     rviz_node = Node(
-            package="rviz2",
-            node_executable="rviz2",
-            node_name="rviz2",
-            arguments=['-d', LaunchConfiguration('rvizconfig')],
-            )
-    
+        package="rviz2",
+        node_executable="rviz2",
+        node_name="rviz2",
+        arguments=['-d', LaunchConfiguration('rvizconfig')],
+    )
+
     return LaunchDescription([
-        launch.actions.DeclareLaunchArgument(name='rvizconfig', default_value=default_rviz_config_path),
+        launch.actions.DeclareLaunchArgument(
+            name='rvizconfig', default_value=default_rviz_config_path),
         trt_pose_hand_node,
         cam2image_node,
         rviz_node
-        ])
-
-
-
-
-
+    ])

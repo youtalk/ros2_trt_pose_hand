@@ -40,6 +40,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.svm import SVC
 
 # Pre-process image message received from cam2image
+
+
 def preprocess(image, width, height):
     global device
     mean = torch.Tensor([0.485, 0.456, 0.406]).cuda()
@@ -51,6 +53,7 @@ def preprocess(image, width, height):
     image = transforms.functional.to_tensor(image).to(device)
     image.sub_(mean[:, None, None]).div_(std[:, None, None])
     return image[None, ...]
+
 
 def load_image(base_dir, image_name):
     frame = cv2.imread(os.path.join(base_dir, image_name))
@@ -66,33 +69,38 @@ def load_params(base_dir, hand_pose_json):
     topology = trt_pose.coco.coco_category_to_topology(hand_pose)
     num_parts = len(hand_pose['keypoints'])
     num_links = len(hand_pose['skeleton'])
-    #hand_pose_skeleton = hand_pose['skeleton']
-    parse_objects = ParseObjects(topology, cmap_threshold=0.15, link_threshold=0.15)
+    # hand_pose_skeleton = hand_pose['skeleton']
+    parse_objects = ParseObjects(
+        topology, cmap_threshold=0.15, link_threshold=0.15)
     MODEL_WEIGHTS = 'hand_pose_resnet18_att_244_244.pth'
     model_weights = os.path.join(base_dir, MODEL_WEIGHTS)
 
-
     return num_parts, num_links, model_weights, parse_objects, topology
 
+
 def load_model(base_dir, num_parts, num_links, model_weights, height, width):
-    model = trt_pose.models.resnet18_baseline_att(num_parts, 2 * num_links).cuda().eval()
+    model = trt_pose.models.resnet18_baseline_att(
+        num_parts, 2 * num_links).cuda().eval()
     model.load_state_dict(torch.load(model_weights))
     MODEL_WEIGHTS = 'hand_pose_resnet18_att_244_244.pth'
     OPTIMIZED_MODEL = 'hand_pose_resnet18_att_244_244_trt.pth'
     model_file_path = os.path.join(base_dir, OPTIMIZED_MODEL)
     if not os.path.isfile(model_file_path):
         data = torch.zeros((1, 3, height, width)).cuda()
-        model_trt = torch2trt.torch2trt(model, [data], fp16_mode=True, max_workspace_size=1 << 25)
+        model_trt = torch2trt.torch2trt(
+            model, [data], fp16_mode=True, max_workspace_size=1 << 25)
         torch.save(model_trt.state_dict(), model_file_path)
     model_trt = TRTModule()
     model_trt.load_state_dict(torch.load(model_file_path))
     return model_trt
 
+
 def load_svm(base_dir):
     clf = make_pipeline(StandardScaler(), SVC(gamma='auto', kernel='rbf'))
     svm_train = False
     if svm_train:
-        clf, predicted = preprocessdata.trainsvm(clf, joints_train, joints_test, hand.labels_train, hand.labels_test)
+        clf, predicted = preprocessdata.trainsvm(
+            clf, joints_train, joints_test, hand.labels_train, hand.labels_test)
         filename = os.path.join(base_dir, 'svmmodel.sav')
         print("Filename:{}".format(filename))
         pickle.dump(clf, open(filename, 'wb'))
@@ -102,6 +110,7 @@ def load_svm(base_dir):
         with open(filename, 'rb') as f:
             clf = pickle.load(f)
     return clf
+
 
 def draw_objects(image, object_counts, objects, normalized_peaks, topology):
     topology = topology
@@ -135,23 +144,23 @@ def draw_objects(image, object_counts, objects, normalized_peaks, topology):
 
     return image
 
+
 def draw_joints(image, joints, hand_pose_skeleton):
     count = 0
     for i in joints:
-        if i==[0,0]:
-            count+=1
+        if i == [0, 0]:
+            count += 1
     '''
     if count>= 3:
         return
     '''
     for i in joints:
-        cv2.circle(image, (i[0],i[1]), 2, (0,0,255), 1)
-    cv2.circle(image, (joints[0][0],joints[0][1]), 2, (255,0,255), 1)
+        cv2.circle(image, (i[0], i[1]), 2, (0, 0, 255), 1)
+    cv2.circle(image, (joints[0][0], joints[0][1]), 2, (255, 0, 255), 1)
     for i in hand_pose_skeleton:
-        if joints[i[0]-1][0]==0 or joints[i[1]-1][0] == 0:
+        if joints[i[0]-1][0] == 0 or joints[i[1]-1][0] == 0:
             break
-        cv2.line(image, (joints[i[0]-1][0],joints[i[0]-1][1]), (joints[i[1]-1][0],joints[i[1]-1][1]), (0,255,0), 1)
-
+        cv2.line(image, (joints[i[0]-1][0], joints[i[0]-1][1]),
+                 (joints[i[1]-1][0], joints[i[1]-1][1]), (0, 255, 0), 1)
 
     return image
-

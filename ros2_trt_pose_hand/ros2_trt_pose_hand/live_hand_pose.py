@@ -18,6 +18,7 @@
 import rclpy
 from ros2_trt_pose_hand.helper import TRTHandPose
 
+
 def main(args=None):
     rclpy.init(args=args)
     trt_pose_hand = TRTHandPose()
@@ -27,8 +28,6 @@ def main(args=None):
     trt_pose_hand.destroy_node()
     rclpy.shutdown()
 
+
 if __name__ == '__main__':
     main()
-
-
-

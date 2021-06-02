@@ -37,6 +37,7 @@ from hand_pose_msgs.msg import FingerPoints, HandPoseDetection  # For pose_msgs
 from rclpy.duration import Duration
 from std_msgs.msg import String
 
+
 class TRTHandPose(Node):
     def __init__(self):
         super().__init__('trt_pose_hand')
@@ -52,58 +53,69 @@ class TRTHandPose(Node):
         self.topology = None
         self.hand_pose_skeleton = None
         self.model = None
-        self.clf = None # SVM Model
+        self.clf = None  # SVM Model
         self.preprocessdata = None
         self.image = None
         self.gesture_type = None
         # ROS2 parameters
-        self.declare_parameter('base_dir', os.getenv("HOME") + 'gesture_models')
+        self.declare_parameter(
+            'base_dir', os.getenv("HOME") + 'gesture_models')
         # Based Dir should contain: model_file resnet/densenet, human_pose json file
         self.declare_parameter('point_range', 10)  # default range is 0 to 10
         self.declare_parameter('show_image', True)  # Show image in cv2.imshow
-        self.declare_parameter('show_gesture', True) # Shows gestures (fist, pan, stop, fine, peace, no hand).
+        # Shows gestures (fist, pan, stop, fine, peace, no hand).
+        self.declare_parameter('show_gesture', True)
         self.base_dir = self.get_parameter('base_dir')._value
-        self.json_file = os.path.join(self.base_dir, 'hand_pose.json') 
+        self.json_file = os.path.join(self.base_dir, 'hand_pose.json')
         self.point_range = self.get_parameter('point_range')._value
         self.show_image_param = self.get_parameter('show_image')._value
         self.show_gesture_param = self.get_parameter('show_gesture')._value
         # ROS2 related init
         # Image subscriber from cam2image
-        self.subscriber_ = self.create_subscription(ImageMsg, 'image', self.read_cam_callback, 10)
-        self.image_pub = self.create_publisher(ImageMsg, 'detections_image', 10)
+        self.subscriber_ = self.create_subscription(
+            ImageMsg, 'image', self.read_cam_callback, 10)
+        self.image_pub = self.create_publisher(
+            ImageMsg, 'detections_image', 10)
         # Publisher for Body Joints and Skeleton
-        self.hand_joints_pub = self.create_publisher(Marker, 'hand_joints', 1000)
-        self.hand_skeleton_pub = self.create_publisher(Marker, 'hand_skeleton', 10)
+        self.hand_joints_pub = self.create_publisher(
+            Marker, 'hand_joints', 1000)
+        self.hand_skeleton_pub = self.create_publisher(
+            Marker, 'hand_skeleton', 10)
         # Publishing pose Message
-        self.publish_pose = self.create_publisher(HandPoseDetection, 'hand_pose_msgs', 100)
+        self.publish_pose = self.create_publisher(
+            HandPoseDetection, 'hand_pose_msgs', 100)
         # Publishing gesture classifcation
-        self.publish_gesture = self.create_publisher(String, "gesture_class", 100)
+        self.publish_gesture = self.create_publisher(
+            String, "gesture_class", 100)
 
     def start(self):
         self.get_logger().info("Loading Parameters\n")
-        self.num_parts, self.num_links, self.model_weights, self.parse_objects, self.topology = load_params(base_dir=self.base_dir, hand_pose_json=self.json_file)
-        with open(os.path.join(self.base_dir,'gesture.json'), 'r') as f:
+        self.num_parts, self.num_links, self.model_weights, self.parse_objects, self.topology = load_params(
+            base_dir=self.base_dir, hand_pose_json=self.json_file)
+        with open(os.path.join(self.base_dir, 'gesture.json'), 'r') as f:
             gesture = json.load(f)
             self.gesture_type = gesture["classes"]
         self.get_logger().info("Loading model weights\n")
         self.clf = load_svm(base_dir=self.base_dir)
-        self.model = load_model(self.base_dir, self.num_parts, self.num_links, self.model_weights, self.height, self.width)
+        self.model = load_model(self.base_dir, self.num_parts,
+                                self.num_links, self.model_weights, self.height, self.width)
         self.get_logger().info("Model weights loaded...\n Waiting for images...\n")
         self.preprocessdata = preprocessdata(self.topology, self.num_parts)
 
-
     def execute(self):
-        data = preprocess(image=self.image, width=self.width, height=self.height)
+        data = preprocess(image=self.image, width=self.width,
+                          height=self.height)
         cmap, paf = self.model(data)
         cmap, paf = cmap.detach().cpu(), paf.detach().cpu()
         self.counts, self.objects, self.peaks = self.parse_objects(cmap, paf)
-        joints = self.preprocessdata.joints_inference(self.image, self.counts, self.objects, self.peaks)
+        joints = self.preprocessdata.joints_inference(
+            self.image, self.counts, self.objects, self.peaks)
         with open(self.json_file, 'r') as f:
             hand_pose = json.load(f)
-        hand_pose_skeleton = hand_pose ['skeleton']
+        hand_pose_skeleton = hand_pose['skeleton']
         annotated_image = draw_joints(self.image, joints, hand_pose_skeleton)
         # cv2.imwrite('unname_pose.jpg', annotated_image)
-        
+
         self.parse_k()
         print("Show gesture Parameter:{}".format(self.show_gesture_param))
         if self.show_gesture_param:
@@ -149,11 +161,13 @@ class TRTHandPose(Node):
 
     def parse_gesture(self, joints):
         dist_bn_joints = self.preprocessdata.find_distance(joints)
-        gesture = self.clf.predict([dist_bn_joints,[0]*self.num_parts*self.num_parts])
+        gesture = self.clf.predict(
+            [dist_bn_joints, [0]*self.num_parts*self.num_parts])
         gesture_joints = gesture[0]
         self.preprocessdata.prev_queue.append(gesture_joints)
         self.preprocessdata.prev_queue.pop(0)
-        gesture_label = self.preprocessdata.print_label(self.preprocessdata.prev_queue, self.gesture_type)
+        gesture_label = self.preprocessdata.print_label(
+            self.preprocessdata.prev_queue, self.gesture_type)
         msg = String()
         msg.data = gesture_label
         self.publish_gesture.publish(msg)
@@ -238,7 +252,8 @@ class TRTHandPose(Node):
             primary_msg = HandPoseDetection()
             for i in range(count):
                 primary_msg.hand_id = i
-                primary_msg = self.init_all_hand_msgs(_msg=primary_msg, count=i)
+                primary_msg = self.init_all_hand_msgs(
+                    _msg=primary_msg, count=i)
                 marker_joints = self.init_markers_spheres()
                 marker_skeleton = self.init_markers_lines()
                 for k in range(21):
@@ -246,224 +261,306 @@ class TRTHandPose(Node):
                     if _idx >= 0:
                         _location = self.peaks[image_idx, k, _idx, :]
                         if k == 0:
-                            primary_msg.palm = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.palm))
+                            primary_msg.palm = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.palm))
                             self.get_logger().info(
                                 "Finger Point Detected: Palm at X:{}, Y:{}".format(primary_msg.palm.x,
-                                                                                primary_msg.palm.y))
+                                                                                   primary_msg.palm.y))
                         if k == 1:
-                            primary_msg.thumb_1 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.thumb_1))
+                            primary_msg.thumb_1 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.thumb_1))
                             self.get_logger().info(
                                 "Finger Point Detected: Thumb:1 at X:{}, Y:{}".format(primary_msg.thumb_1.x,
-                                                                                    primary_msg.thumb_1.y))
+                                                                                      primary_msg.thumb_1.y))
                         if k == 2:
-                            primary_msg.thumb_2 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.thumb_2))
+                            primary_msg.thumb_2 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.thumb_2))
                             self.get_logger().info(
                                 "Finger Point Detected: Thumb: 2 at X:{}, Y:{}".format(primary_msg.thumb_2.x,
-                                                                                     primary_msg.thumb_2.y))
+                                                                                       primary_msg.thumb_2.y))
                             if self.valid_marker_point(primary_msg.thumb_1):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.thumb_1))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.thumb_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.thumb_1))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.thumb_2))
 
                         if k == 3:
-                            primary_msg.thumb_3 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.thumb_3))
+                            primary_msg.thumb_3 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.thumb_3))
                             self.get_logger().info(
                                 "Finger Point Detected: Thumb: 3 at X:{}, Y:{}".format(primary_msg.thumb_3.x,
                                                                                        primary_msg.thumb_3.y))
                             if self.valid_marker_point(primary_msg.thumb_2):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.thumb_2))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.thumb_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.thumb_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.thumb_3))
 
                         if k == 4:
-                            primary_msg.thumb_4 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.thumb_4))
+                            primary_msg.thumb_4 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.thumb_4))
                             self.get_logger().info(
                                 "Finger Point Detected: Thumb: 4 at X:{}, Y:{}".format(primary_msg.thumb_4.x,
                                                                                        primary_msg.thumb_4.y))
                             if self.valid_marker_point(primary_msg.thumb_3):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.thumb_3))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.thumb_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.thumb_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.thumb_4))
 
                             if self.valid_marker_point(primary_msg.palm):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.palm))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.thumb_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.palm))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.thumb_4))
 
                         if k == 5:
-                            primary_msg.index_finger_1 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.index_finger_1))
+                            primary_msg.index_finger_1 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.index_finger_1))
                             self.get_logger().info(
                                 "Finger Point Detected: Index Finger:1 at X:{}, Y:{}".format(primary_msg.index_finger_1.x,
-                                                                                      primary_msg.index_finger_1.y))
+                                                                                             primary_msg.index_finger_1.y))
 
                         if k == 6:
-                            primary_msg.index_finger_2 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.index_finger_2))
+                            primary_msg.index_finger_2 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.index_finger_2))
                             self.get_logger().info(
                                 "Finger Point Detected: Index Finger:2  at X:{}, Y:{}".format(primary_msg.index_finger_2.x,
-                                                                                       primary_msg.index_finger_2.y))
+                                                                                              primary_msg.index_finger_2.y))
                             if self.valid_marker_point(primary_msg.index_finger_1):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.index_finger_1))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.index_finger_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.index_finger_1))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.index_finger_2))
 
                         if k == 7:
-                            primary_msg.index_finger_3 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.index_finger_3))
+                            primary_msg.index_finger_3 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.index_finger_3))
                             self.get_logger().info(
                                 "Finger Point Detected: Index Finger: 3 at X:{}, Y:{}".format(primary_msg.index_finger_3.x,
-                                                                                       primary_msg.index_finger_3.y))
+                                                                                              primary_msg.index_finger_3.y))
                             if self.valid_marker_point(primary_msg.index_finger_2):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.index_finger_2))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.index_finger_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.index_finger_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.index_finger_3))
 
                         if k == 8:
-                            primary_msg.index_finger_4 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.index_finger_4))
+                            primary_msg.index_finger_4 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.index_finger_4))
                             self.get_logger().info(
                                 "Finger Point Detected: Index Finger: 4 at X:{}, Y:{}".format(primary_msg.index_finger_4.x,
-                                                                                       primary_msg.index_finger_4.y))
+                                                                                              primary_msg.index_finger_4.y))
                             if self.valid_marker_point(primary_msg.index_finger_3):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.index_finger_3))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.index_finger_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.index_finger_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.index_finger_4))
 
                             if self.valid_marker_point(primary_msg.palm):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.palm))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.index_finger_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.palm))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.index_finger_4))
 
                         if k == 9:
-                            primary_msg.middle_finger_1 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.middle_finger_1))
+                            primary_msg.middle_finger_1 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.middle_finger_1))
                             self.get_logger().info(
                                 "Finger Point Detected: Middle Finger:1 at X:{}, Y:{}".format(
                                     primary_msg.middle_finger_1.x,
                                     primary_msg.middle_finger_1.y))
 
                         if k == 10:
-                            primary_msg.middle_finger_2 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.middle_finger_2))
+                            primary_msg.middle_finger_2 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.middle_finger_2))
                             self.get_logger().info(
                                 "Finger Point Detected: Middle Finger:2  at X:{}, Y:{}".format(
                                     primary_msg.middle_finger_2.x,
                                     primary_msg.middle_finger_2.y))
                             if self.valid_marker_point(primary_msg.middle_finger_1):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.middle_finger_1))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.middle_finger_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.middle_finger_1))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.middle_finger_2))
 
                         if k == 11:
-                            primary_msg.middle_finger_3 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.middle_finger_3))
+                            primary_msg.middle_finger_3 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.middle_finger_3))
                             self.get_logger().info(
                                 "Finger Point Detected: Middle Finger: 3 at X:{}, Y:{}".format(
                                     primary_msg.middle_finger_3.x,
                                     primary_msg.middle_finger_3.y))
                             if self.valid_marker_point(primary_msg.middle_finger_2):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.middle_finger_2))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.middle_finger_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.middle_finger_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.middle_finger_3))
 
                         if k == 12:
-                            primary_msg.middle_finger_4 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.middle_finger_4))
+                            primary_msg.middle_finger_4 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.middle_finger_4))
                             self.get_logger().info(
                                 "Finger Point Detected: Middle Finger: 4 at X:{}, Y:{}".format(
                                     primary_msg.middle_finger_4.x,
                                     primary_msg.middle_finger_4.y))
                             if self.valid_marker_point(primary_msg.middle_finger_3):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.middle_finger_3))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.middle_finger_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.middle_finger_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.middle_finger_4))
 
                             if self.valid_marker_point(primary_msg.palm):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.palm))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.middle_finger_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.palm))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.middle_finger_4))
 
                         if k == 13:
-                            primary_msg.ring_finger_1 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.ring_finger_1))
+                            primary_msg.ring_finger_1 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.ring_finger_1))
                             self.get_logger().info(
                                 "Finger Point Detected: Ring Finger:1 at X:{}, Y:{}".format(primary_msg.ring_finger_1.x,
                                                                                             primary_msg.ring_finger_1.y))
 
                         if k == 14:
-                            primary_msg.ring_finger_2 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.ring_finger_2))
+                            primary_msg.ring_finger_2 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.ring_finger_2))
                             self.get_logger().info(
                                 "Finger Point Detected: Ring Finger:2  at X:{}, Y:{}".format(
                                     primary_msg.ring_finger_2.x,
                                     primary_msg.ring_finger_2.y))
                             if self.valid_marker_point(primary_msg.ring_finger_1):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.ring_finger_1))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.ring_finger_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.ring_finger_1))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.ring_finger_2))
 
                         if k == 15:
-                            primary_msg.ring_finger_3 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.ring_finger_3))
+                            primary_msg.ring_finger_3 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.ring_finger_3))
                             self.get_logger().info(
                                 "Finger Point Detected: Ring Finger: 3 at X:{}, Y:{}".format(
                                     primary_msg.ring_finger_3.x,
                                     primary_msg.ring_finger_3.y))
                             if self.valid_marker_point(primary_msg.ring_finger_2):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.ring_finger_2))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.ring_finger_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.ring_finger_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.ring_finger_3))
 
                         if k == 16:
-                            primary_msg.ring_finger_4 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.ring_finger_4))
+                            primary_msg.ring_finger_4 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.ring_finger_4))
                             self.get_logger().info(
                                 "Finger Point Detected: Ring Finger: 4 at X:{}, Y:{}".format(
                                     primary_msg.ring_finger_4.x,
                                     primary_msg.ring_finger_4.y))
                             if self.valid_marker_point(primary_msg.ring_finger_3):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.ring_finger_3))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.ring_finger_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.ring_finger_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.ring_finger_4))
 
                             if self.valid_marker_point(primary_msg.palm):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.palm))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.ring_finger_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.palm))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.ring_finger_4))
 
                         if k == 17:
-                            primary_msg.baby_finger_1 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.baby_finger_1))
+                            primary_msg.baby_finger_1 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.baby_finger_1))
                             self.get_logger().info(
                                 "Finger Point Detected: Baby Finger:1 at X:{}, Y:{}".format(primary_msg.baby_finger_1.x,
                                                                                             primary_msg.baby_finger_1.y))
 
                         if k == 18:
-                            primary_msg.baby_finger_2 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.baby_finger_2))
+                            primary_msg.baby_finger_2 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.baby_finger_2))
                             self.get_logger().info(
                                 "Finger Point Detected: Baby Finger:2  at X:{}, Y:{}".format(
                                     primary_msg.baby_finger_2.x,
                                     primary_msg.baby_finger_2.y))
                             if self.valid_marker_point(primary_msg.baby_finger_1):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.baby_finger_1))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.baby_finger_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.baby_finger_1))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.baby_finger_2))
 
                         if k == 19:
-                            primary_msg.baby_finger_3 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.baby_finger_3))
+                            primary_msg.baby_finger_3 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.baby_finger_3))
                             self.get_logger().info(
                                 "Finger Point Detected: Baby Finger: 3 at X:{}, Y:{}".format(
                                     primary_msg.baby_finger_3.x,
                                     primary_msg.baby_finger_3.y))
                             if self.valid_marker_point(primary_msg.baby_finger_2):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.baby_finger_2))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.baby_finger_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.baby_finger_2))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.baby_finger_3))
 
                         if k == 20:
-                            primary_msg.baby_finger_4 = self.write_finger_points_msg(_location)
-                            marker_joints.points.append(self.add_point_to_marker(primary_msg.baby_finger_4))
+                            primary_msg.baby_finger_4 = self.write_finger_points_msg(
+                                _location)
+                            marker_joints.points.append(
+                                self.add_point_to_marker(primary_msg.baby_finger_4))
                             self.get_logger().info(
                                 "Finger Point Detected: Baby Finger: 4 at X:{}, Y:{}".format(
                                     primary_msg.baby_finger_4.x,
                                     primary_msg.baby_finger_4.y))
                             if self.valid_marker_point(primary_msg.baby_finger_3):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.baby_finger_3))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.baby_finger_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.baby_finger_3))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.baby_finger_4))
 
                             if self.valid_marker_point(primary_msg.palm):
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.palm))
-                                marker_skeleton.points.append(self.add_point_to_marker(primary_msg.baby_finger_4))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.palm))
+                                marker_skeleton.points.append(
+                                    self.add_point_to_marker(primary_msg.baby_finger_4))
 
                         self.publish_pose.publish(primary_msg)
                         self.hand_skeleton_pub.publish(marker_skeleton)
