@@ -62,7 +62,7 @@ class TRTHandPose(Node):
             'base_dir', os.getenv("HOME") + 'gesture_models')
         # Based Dir should contain: model_file resnet/densenet, human_pose json file
         self.declare_parameter('point_range', 10)  # default range is 0 to 10
-        self.declare_parameter('show_image', True)  # Show image in cv2.imshow
+        self.declare_parameter('show_image', False)  # Show image in cv2.imshow
         # Shows gestures (fist, pan, stop, fine, peace, no hand).
         self.declare_parameter('show_gesture', True)
         self.base_dir = self.get_parameter('base_dir')._value
